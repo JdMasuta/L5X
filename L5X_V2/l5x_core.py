@@ -1,0 +1,535 @@
+#!/usr/bin/env python3
+"""
+L5X Core Library
+
+Core functions for extracting state machine logic from RSLogix L5X files
+and generating Mermaid flowchart diagrams.
+
+This module provides reusable library functions that can be imported
+and used by CLI scripts, GUI applications, or other Python programs.
+
+Author: Generated with Claude Code
+"""
+
+import l5x
+import re
+from pathlib import Path
+from typing import Dict, List, Set, Tuple, Optional, Union, Callable, Any
+from mermaid_cli import render_mermaid_file_sync
+
+
+def extract_state_number(tag_reference: str) -> Optional[int]:
+    """
+    Extract state number from a tag reference.
+
+    Examples:
+        '_A28_PH.ST[0].1' -> 1
+        '_A28_PH.NST[0].14' -> 14
+
+    Args:
+        tag_reference: Tag reference string from ladder logic
+
+    Returns:
+        State number or None if not found
+    """
+    match = re.search(r'\.(\d+)$', tag_reference)
+    if match:
+        return int(match.group(1))
+    return None
+
+
+def get_state_name(prj: l5x.Project, tag_name: str, state_num: int) -> str:
+    """
+    Get the descriptive name for a state from tag bit description.
+
+    Args:
+        prj: L5X Project object
+        tag_name: Name of the state tag (e.g., '_A28_PH')
+        state_num: State number (bit number)
+
+    Returns:
+        State name string (fallback to "State {num}" if not found)
+    """
+    try:
+        tag = prj.controller.tags[tag_name]
+        st_0 = tag['ST'][0]
+        bit = st_0[state_num]
+        description = bit.description
+
+        if description:
+            lines = description.strip().split('\n')
+            # First line is "State X", remaining lines are the name
+            if len(lines) > 1:
+                state_name = '\n'.join(lines[1:]).strip()
+                return state_name
+
+        return f"State {state_num}"
+
+    except (KeyError, IndexError):
+        # Return fallback name without printing (library function)
+        return f"State {state_num}"
+
+
+def find_state_logic_section(rll_content) -> Optional[int]:
+    """
+    Find the index of the STATE LOGIC section marker rung.
+
+    Args:
+        rll_content: RLLContent XML element containing rungs
+
+    Returns:
+        Index of STATE LOGIC marker rung or None if not found
+    """
+    for i, rung in enumerate(rll_content):
+        comment = rung.find('Comment')
+        if comment is not None:
+            cdata = comment.find('CDATAContent')
+            if cdata is not None and cdata.text and 'STATE LOGIC' in cdata.text:
+                return i
+    return None
+
+
+def parse_rung_logic(rung) -> Tuple[Optional[int], List[int]]:
+    """
+    Parse a rung to extract source state (XIC) and target states (OTL).
+
+    Args:
+        rung: Rung XML element
+
+    Returns:
+        Tuple of (source_state_number, [target_state_numbers])
+        Returns (None, []) if rung is NOP or has no XIC
+    """
+    text = rung.find('Text')
+    if text is None:
+        return (None, [])
+
+    text_cdata = text.find('CDATAContent')
+    if text_cdata is None or not text_cdata.text:
+        return (None, [])
+
+    logic = text_cdata.text.strip()
+
+    # Skip NOP() rungs
+    if logic.startswith('NOP()'):
+        return (None, [])
+
+    # Extract source state from first XIC
+    source_state = None
+    xic_match = re.match(r'XIC\(([^)]+)\)', logic)
+    if xic_match:
+        xic_tag = xic_match.group(1)
+        source_state = extract_state_number(xic_tag)
+
+    # Extract target states from all OTL instructions
+    target_states = []
+    otl_matches = re.findall(r'OTL\(([^)]+)\)', logic)
+    for otl_tag in otl_matches:
+        target_state = extract_state_number(otl_tag)
+        if target_state is not None:
+            target_states.append(target_state)
+
+    return (source_state, target_states)
+
+
+def build_state_transitions(
+    rll_content,
+    start_index: int,
+    end_marker: str = "FAULT"
+) -> Dict[int, Set[int]]:
+    """
+    Build a map of state transitions from the STATE LOGIC section.
+
+    Args:
+        rll_content: RLLContent XML element
+        start_index: Index where STATE LOGIC section starts
+        end_marker: Comment text that marks end of STATE LOGIC section
+
+    Returns:
+        Dict mapping source_state -> set of target_states
+    """
+    state_transitions = {}
+    rungs_list = list(rll_content)
+
+    # Start from start_index + 2 to skip marker and cleanup rung
+    for i in range(start_index + 2, len(rungs_list)):
+        rung = rungs_list[i]
+
+        # Check if we've reached the end of STATE LOGIC section
+        comment = rung.find('Comment')
+        if comment is not None:
+            cdata = comment.find('CDATAContent')
+            if cdata is not None and cdata.text and end_marker in cdata.text:
+                break
+
+        # Parse this rung
+        source_state, target_states = parse_rung_logic(rung)
+
+        if source_state is not None and target_states:
+            # Initialize set for this source state if not exists
+            if source_state not in state_transitions:
+                state_transitions[source_state] = set()
+
+            # Add all target states (set automatically handles duplicates)
+            state_transitions[source_state].update(target_states)
+
+    return state_transitions
+
+
+def generate_mermaid_flowchart(
+    title: str,
+    state_transitions: Dict[int, Set[int]],
+    state_names: Dict[int, str]
+) -> str:
+    """
+    Generate Mermaid flowchart syntax from state transitions.
+
+    Args:
+        title: Diagram title
+        state_transitions: Dict mapping source_state -> set of target_states
+        state_names: Dict mapping state_number -> state_name
+
+    Returns:
+        Mermaid flowchart syntax as string
+    """
+    # Collect all unique state numbers
+    all_states = set(state_transitions.keys())
+    for targets in state_transitions.values():
+        all_states.update(targets)
+
+    graph_type = 'stateDiagram' if True else 'flowchart'  # Change to False to use flowchart
+
+    if graph_type == 'flowchart':
+        lines = ['---',
+                'title: {title}'.format(title=title),
+                'config:',
+                '  layout: elk',
+                '---', '',
+                'flowchart TB', '']
+
+        # Generate node definitions
+        # Format: S{state_num}[State {state_num}, {state_name}]
+        for state_num in sorted(all_states):
+            name = state_names.get(state_num, f"State {state_num}")
+            # Clean up name for display (limit length, replace newlines)
+            clean_name = name.replace('\n', ' - ')[:60]
+            clean_name = clean_name.replace('(', '<')[:60]
+            clean_name = clean_name.replace(')', '>')[:60]
+            lines.append(f'    S{state_num}[State {state_num}, {clean_name}]')
+
+        lines.append('')  # Blank line between nodes and edges
+
+        # Generate edge definitions
+        for source_state in sorted(state_transitions.keys()):
+            for target_state in sorted(state_transitions[source_state]):
+                # Draw double line for 1 to 1 transitions
+                if (len(state_transitions[target_state]) == 1):
+                    lines.append(f'    S{source_state} ==> S{target_state}')
+                else:
+                    lines.append(f'    S{source_state} --> S{target_state}')
+
+    elif graph_type == 'stateDiagram':
+        lines = ['---',
+                'title: {title}'.format(title=title),
+                '---', '',
+                'stateDiagram-v2',
+                '    direction TB', '']
+
+        # Generate node definitions
+        # Format: State_{state_num} : State {state_num}, {state_name}
+        for state_num in sorted(all_states):
+            name = state_names.get(state_num, f"State {state_num}")
+            clean_name = name.replace('\n', ' - ')[:60]
+            lines.append(f'    S{state_num} : {state_num}. {clean_name}')
+
+        lines.append('')  # Blank line between nodes and edges
+
+        # Generate edge definitions
+        for source_state in sorted(state_transitions.keys()):
+            for target_state in sorted(state_transitions[source_state]):
+                lines.append(f'    S{source_state} --> S{target_state}')
+
+    return '\n'.join(lines)
+
+
+def save_mermaid_diagram(mermaid_text: str, output_path: Union[str, Path]):
+    """
+    Save Mermaid diagram to a markdown file.
+
+    Args:
+        mermaid_text: Mermaid flowchart syntax
+        output_path: Path to output markdown file
+    """
+    output_path = Path(output_path)
+    with open(output_path, 'w', encoding='utf-8') as f:
+        f.write('# State Logic Diagram\n\n')
+        f.write('```mermaid\n')
+        f.write(mermaid_text)
+        f.write('\n```\n')
+
+
+def render_mermaid_to_svg(
+    markdown_file: Union[str, Path],
+    output_svg_file: Optional[Union[str, Path]] = None,
+    progress_callback: Optional[Callable[[str], None]] = None
+) -> Dict[str, Any]:
+    """
+    Render a Mermaid markdown file to SVG format.
+
+    Args:
+        markdown_file: Path to .md file containing Mermaid diagram
+        output_svg_file: Path for output .svg file (auto-generated if None)
+        progress_callback: Optional callback for progress messages
+
+    Returns:
+        Dictionary with keys:
+            - success: bool - True if rendering succeeded
+            - message: str - Success or error message
+            - svg_file: str - Path to generated SVG file (empty on error)
+            - error: Optional[str] - Error details if failed
+    """
+    def progress(msg: str):
+        """Helper to call progress callback if provided."""
+        if progress_callback:
+            progress_callback(msg)
+
+    try:
+        markdown_path = Path(markdown_file)
+
+        # Check markdown file exists
+        if not markdown_path.exists():
+            return {
+                'success': False,
+                'message': f"Markdown file not found: {markdown_path}",
+                'svg_file': '',
+                'error': f"File not found: {markdown_path}"
+            }
+
+        # Auto-generate SVG filename if not provided
+        if output_svg_file is None:
+            svg_path = markdown_path.with_suffix('.svg')
+        else:
+            svg_path = Path(output_svg_file)
+
+        progress(f"Rendering diagram to SVG: {svg_path.name}")
+
+        # Render using mermaid-cli
+        render_mermaid_file_sync(
+            input_file=str(markdown_path),
+            output_file=str(svg_path),
+            output_format='svg',
+            background_color='white',
+            viewport={'width': 1200, 'height': 800},
+            #mermaid_config={"layout": "elk"},
+        )
+
+        # mermaid-cli adds -1 suffix when extracting from markdown
+        # Check for both the requested filename and the -1 suffixed version
+        svg_path_with_suffix = svg_path.parent / f"{svg_path.stem}-1{svg_path.suffix}"
+
+        if svg_path_with_suffix.exists():
+            # Rename the -1 file to the expected name
+            svg_path_with_suffix.rename(svg_path)
+
+        # Verify SVG was created
+        if not svg_path.exists():
+            return {
+                'success': False,
+                'message': "SVG file was not created",
+                'svg_file': '',
+                'error': "Rendering completed but output file not found"
+            }
+
+        progress(f"SVG rendered successfully: {svg_path.name}")
+
+        return {
+            'success': True,
+            'message': f"Diagram rendered to {svg_path.name}",
+            'svg_file': str(svg_path),
+            'error': None
+        }
+
+    except Exception as e:
+        return {
+            'success': False,
+            'message': f"Failed to render diagram: {str(e)}",
+            'svg_file': '',
+            'error': str(e)
+        }
+
+
+def generate_state_diagram(
+    input_file: Union[str, Path],
+    output_file: Union[str, Path],
+    tag_name: Optional[str] = None,
+    progress_callback: Optional[Callable[[str], None]] = None
+) -> Dict[str, Any]:
+    """
+    Generate state diagram from L5X file. Complete workflow in one function.
+
+    This is the main entry point for library use. It coordinates all the
+    individual functions to load an L5X file, extract state logic, generate
+    a Mermaid diagram, and save it to a file.
+
+    Args:
+        input_file: Path to input .L5X file
+        output_file: Path to output .md file
+        tag_name: Optional state tag name (auto-detects if None)
+        progress_callback: Optional callback for progress messages
+
+    Returns:
+        Dictionary with keys:
+            - success: bool - True if diagram generated successfully
+            - message: str - Success or error message
+            - states: List[int] - State numbers found (empty on error)
+            - transitions_count: int - Number of transitions (0 on error)
+            - diagram_text: str - Mermaid syntax (empty on error)
+            - error: Optional[str] - Error details if failed
+
+    Raises:
+        FileNotFoundError: If input file doesn't exist
+        l5x.InvalidFile: If input file is not valid L5X
+        ValueError: If no STATE LOGIC section found or tag detection fails
+    """
+    def progress(msg: str):
+        """Helper to call progress callback if provided."""
+        if progress_callback:
+            progress_callback(msg)
+
+    try:
+        input_path = Path(input_file)
+        output_path = Path(output_file)
+
+        # Check input file exists
+        if not input_path.exists():
+            raise FileNotFoundError(f"Input file not found: {input_path}")
+
+        # Load L5X project
+        progress(f"Loading L5X file: {input_path.name}")
+        prj = l5x.Project(str(input_path))
+
+        # Find the routine with STATE LOGIC section
+        progress("Searching for STATE LOGIC section...")
+        rll_content = None
+        routine_name = None
+        program_name = None
+
+        for prog_name in prj.programs.names:
+            program = prj.programs[prog_name]
+            routines_elem = program.element.find('Routines')
+            if routines_elem is not None:
+                for routine in routines_elem:
+                    temp_rll = routine.find('RLLContent')
+                    if temp_rll is not None:
+                        # Check if this routine has STATE LOGIC
+                        if find_state_logic_section(temp_rll) is not None:
+                            rll_content = temp_rll
+                            routine_name = routine.attrib.get('Name')
+                            program_name = prog_name
+                            break
+                if rll_content is not None:
+                    break
+
+        if rll_content is None:
+            raise ValueError("No STATE LOGIC section found in file")
+
+        progress(f"Found STATE LOGIC in program: {program_name}, Routine: {routine_name}")
+
+        # Find STATE LOGIC section
+        state_logic_index = find_state_logic_section(rll_content)
+
+        # Auto-detect tag name if not provided
+        if tag_name is None:
+            progress("Auto-detecting state tag...")
+            # Try to find a StateLogic tag
+            for tag_name_candidate in prj.controller.tags.names:
+                try:
+                    tag = prj.controller.tags[tag_name_candidate]
+                    if tag.data_type == 'StateLogic':
+                        tag_name = tag_name_candidate
+                        progress(f"Auto-detected state tag: {tag_name}")
+                        break
+                except:
+                    continue
+
+        if tag_name is None:
+            raise ValueError("Could not auto-detect state tag. Please specify tag_name parameter.")
+
+        progress(f"Using state tag: {tag_name}")
+
+        # Build state transitions map
+        progress("Extracting state transitions...")
+        state_transitions = build_state_transitions(rll_content, state_logic_index)
+
+        if not state_transitions:
+            progress("Warning: No state transitions found")
+
+        progress(f"Found {len(state_transitions)} source states")
+
+        # Get all state names
+        progress("Retrieving state names...")
+        all_states = set(state_transitions.keys())
+        for targets in state_transitions.values():
+            all_states.update(targets)
+
+        state_names = {}
+        for state_num in all_states:
+            state_names[state_num] = get_state_name(prj, tag_name, state_num)
+
+        # Generate Mermaid flowchart
+        progress("Generating Mermaid flowchart...")
+        mermaid_text = generate_mermaid_flowchart(routine_name, state_transitions, state_names)
+
+        # Save to file
+        progress(f"Saving diagram to: {output_path.name}")
+        save_mermaid_diagram(mermaid_text, output_path)
+
+        # Calculate statistics
+        transitions_count = sum(len(targets) for targets in state_transitions.values())
+        states_list = sorted(all_states)
+
+        return {
+            'success': True,
+            'message': f"Diagram generated successfully",
+            'states': states_list,
+            'transitions_count': transitions_count,
+            'diagram_text': mermaid_text,
+            'error': None
+        }
+
+    except FileNotFoundError as e:
+        return {
+            'success': False,
+            'message': str(e),
+            'states': [],
+            'transitions_count': 0,
+            'diagram_text': '',
+            'error': f"File not found: {str(e)}"
+        }
+    except l5x.InvalidFile as e:
+        return {
+            'success': False,
+            'message': f"Invalid L5X file",
+            'states': [],
+            'transitions_count': 0,
+            'diagram_text': '',
+            'error': str(e)
+        }
+    except ValueError as e:
+        return {
+            'success': False,
+            'message': str(e),
+            'states': [],
+            'transitions_count': 0,
+            'diagram_text': '',
+            'error': str(e)
+        }
+    except Exception as e:
+        return {
+            'success': False,
+            'message': f"Unexpected error: {str(e)}",
+            'states': [],
+            'transitions_count': 0,
+            'diagram_text': '',
+            'error': str(e)
+        }
