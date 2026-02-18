@@ -16,12 +16,11 @@ from PySide6.QtWidgets import (
     QLabel, QLineEdit, QPushButton, QTextEdit, QFileDialog
 )
 from PySide6.QtCore import Qt, Signal
+from PySide6.QtWebEngineWidgets import QWebEngineView
 from PySide6.QtGui import QFont
-from PySide6.QtSvgWidgets import QSvgWidget
 
 # Import from l5x_core library
 from l5x_core import generate_state_diagram, render_mermaid_to_svg
-
 
 # Stylesheet for the application
 STYLESHEET = """
@@ -82,6 +81,7 @@ QLineEdit {
     border-radius: 4px;
     font-size: 10pt;
     background-color: white;
+    color: black;
 }
 
 #statusBox {
@@ -151,28 +151,114 @@ class DropZoneWidget(QLabel):
 class SVGViewerDialog(QWidget):
     """Popup window for displaying rendered SVG diagrams."""
 
-    def __init__(self, svg_file_path: str, parent=None):
+    def __init__(self, mermaid_text=str, parent=None):
         super().__init__(parent)
-        self.svg_file = svg_file_path
+        self.setWindowFlags(Qt.Window)
+        self.mermaid_text = mermaid_text
+        # Print mermaid text to temp file for debugging
+        with open("debug_mermaid.txt", "w") as f:
+            f.write(self.mermaid_text)
         self.initUI()
 
     def initUI(self):
         """Initialize the viewer UI."""
-        self.setWindowTitle(f'Diagram Preview - {Path(self.svg_file).name}')
+        self.setWindowTitle(f'Diagram Preview')
         self.setMinimumSize(800, 600)
 
         # Create layout
         layout = QVBoxLayout()
-        layout.setContentsMargins(10, 10, 10, 10)
+        layout.setContentsMargins(0, 0, 0, 0)
 
-        # Create SVG widget
-        self.svg_widget = QSvgWidget()
-        self.svg_widget.load(self.svg_file)
+        # Use QWebEngineView to render instead of QSvgWidget
+        self.browser = QWebEngineView()
+        
+        # Inject Mermaid.js and your diagram into a template
+        # We use a CDN here; for a 100% offline exe, you would bundle the .js file
+        html_template = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <style>
+                body {{ background-color: #64CCC9; margin: 0; padding: 20px; font-family: sans-serif; }}
+                #loading-overlay {{
+                    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+                    background: #64CCC9; display: flex; flex-direction: column;
+                    justify-content: center; align-items: center; z-index: 1000;
+                }}
+                .spinner {{
+                    width: 50px; height: 50px; border: 5px solid rgba(255,255,255,0.3);
+                    border-radius: 50%; border-top-color: #fff; animation: spin 1s ease-in-out infinite;
+                }}
+                @keyframes spin {{ to {{ transform: rotate(360deg); }} }}
+            </style>
+        </head>
+        <body>
+            <div id="loading-overlay">
+                <div class="spinner"></div>
+                <p>Loading Diagram Engine...</p>
+            </div>
 
-        # Set background color to white
-        self.svg_widget.setStyleSheet("background-color: white;")
+            <pre class="mermaid" id="diagram">
+                {self.mermaid_text}
+            </pre>
 
-        layout.addWidget(self.svg_widget)
+            <script type="module">
+                import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+                import elkLayouts from 'https://cdn.jsdelivr.net/npm/@mermaid-js/layout-elk@0/dist/mermaid-layout-elk.esm.min.mjs';
+
+                async function renderDiagram() {{
+                    // Wait until the CDN files are actually parsed
+                    while (typeof mermaid === 'undefined' || typeof elkLayouts === 'undefined') {{
+                        await new Promise(r => setTimeout(r, 50));
+                    }}
+
+                    try {{
+                        // Explicitly register the loader
+                        await mermaid.registerLayoutLoaders([elkLayouts]);
+
+                        // Initialize without auto-starting
+                        mermaid.initialize({{ 
+                            startOnLoad: false, 
+                            layout: 'elk',
+                            look: 'handCoded',
+                            securityLevel: 'loose',
+                            flowchart: {{ defaultRenderer: 'elk' }} // Double-force the renderer
+                        }});
+
+                        // Manually run the renderer now that we are 100% sure ELK is registered
+                        await mermaid.run();
+                        console.log("ELK Layout loaded successfully.");                        
+                        document.getElementById('loading-overlay').style.display = 'none';
+                    
+                    }} catch (err) {{
+                        console.error("ELK Layout failed to load:", err[0], err[1]);
+                        // Fallback to standard render if ELK fails
+
+                        // Initialize without auto-starting
+                        mermaid.initialize({{ 
+                            startOnLoad: true, 
+                            layout: 'dagre',
+                            securityLevel: 'loose',
+                        }});
+
+                        try {{
+                            await mermaid.run();
+                            console.log("Standard Layout loaded successfully.");
+                        }} catch (err2) {{
+                            console.error("Standard Layout failed to load:", err2);
+                            }} 
+
+                        document.getElementById('loading-overlay').style.display = 'none';
+                    }}
+                }}
+                renderDiagram();
+            </script>
+        </body>
+        </html>
+        """
+        self.browser.setHtml(html_template)
+
+        layout.addWidget(self.browser)
 
         # Add close button
         close_btn = QPushButton('Close')
@@ -189,6 +275,7 @@ class L5XMermaidGUI(QMainWindow):
         super().__init__()
         self.input_file = None
         self.output_file = None
+        self.viewers = []
         self.initUI()
 
     def initUI(self):
@@ -266,6 +353,18 @@ class L5XMermaidGUI(QMainWindow):
         # Apply stylesheet
         self.setStyleSheet(STYLESHEET)
 
+    def mousePressEvent(self, event):
+        """Bring window to front on click."""
+        self.raise_()
+        self.activateWindow()
+        return super().mousePressEvent(event)
+    
+    def closeEvent(self, event):
+        """Handle application close event - close all viewer windows."""
+        for viewer in self.viewers:
+            viewer.close()
+        event.accept()
+
     def on_file_dropped(self, filepath):
         """Handle file drop/selection event."""
         self.input_file = filepath
@@ -290,11 +389,12 @@ class L5XMermaidGUI(QMainWindow):
         self.add_status('✓ Input file ready', 'info')
 
     def browse_input_file(self):
-        """Open file dialog to select input .L5X file."""
+        """Open file dialog to select input .L5X file. Opens User's Downloads folder by default."""
+        downloads_path = str(Path.home() / 'Downloads')
         filepath, _ = QFileDialog.getOpenFileName(
             self,
             'Select L5X File',
-            '',
+            downloads_path,
             'L5X Files (*.L5X);;All Files (*)'
         )
 
@@ -399,27 +499,41 @@ class L5XMermaidGUI(QMainWindow):
                 self.add_status('', 'info')  # Blank line
                 self.add_status(f'✓ Success! Diagram saved to: {self.output_file}', 'success')
 
-                # Automatically render to SVG
-                self.add_status('', 'info')  # Blank line
-                self.add_status('Rendering diagram to SVG...', 'info')
+                # Disable automatic rendering for now
+                if False:  # Change to False to disable automatic rendering
+                    # Automatically render to SVG
+                    self.add_status('', 'info')  # Blank line
+                    self.add_status('Rendering diagram to SVG...', 'info')
 
-                render_result = render_mermaid_to_svg(
-                    markdown_file=self.output_file,
-                    output_svg_file=None,  # Auto-generate filename
-                    progress_callback=lambda msg: self.add_status(msg, 'info')
-                )
+                    render_result = render_mermaid_to_svg(
+                        markdown_file=self.output_file,
+                        output_svg_file=None,  # Auto-generate filename
+                        progress_callback=lambda msg: self.add_status(msg, 'info')
+                    )
 
-                if render_result['success']:
-                    svg_file = render_result['svg_file']
-                    self.add_status(f'✓ SVG saved to: {svg_file}', 'success')
+                    if render_result['success']:
+                        svg_file = render_result['svg_file']
+                        self.add_status(f'✓ SVG saved to: {svg_file}', 'success')
+                        self.show_svg_viewer(render_result['mermaid_text'])
+                    else:
+                        self.add_status(f'✗ Rendering failed: {render_result["message"]}', 'error')
+                        if render_result.get('error'):
+                            self.add_status(f'   Details: {render_result["error"]}', 'error')
+            
+                # Get stringified mermaid text for viewer
+                with open(self.output_file, 'r', encoding='utf-8') as f:
+                    mermaid_text = f.read()
+                    f.close()
+                # Remove code fences if present
+                if mermaid_text.startswith('# State Logic Diagram'):
+                    # Remove header line if present
+                    mermaid_text = '\n'.join(mermaid_text.splitlines()[2:])
+                    mermaid_text = mermaid_text.replace('```mermaid', '').replace('```', '').strip()    
 
-                    # Display the rendered diagram in popup window
-                    self.add_status('Opening diagram viewer...', 'info')
-                    self.show_svg_viewer(svg_file)
-                else:
-                    self.add_status(f'✗ Rendering failed: {render_result["message"]}', 'error')
-                    if render_result.get('error'):
-                        self.add_status(f'   Details: {render_result["error"]}', 'error')
+                # Display the rendered diagram in popup window
+                self.add_status('Opening diagram viewer...', 'info')
+                self.show_svg_viewer(mermaid_text)
+
             else:
                 # Show errors
                 if result.stderr:
@@ -438,11 +552,16 @@ class L5XMermaidGUI(QMainWindow):
             # Re-enable generate button
             self.generate_btn.setEnabled(True)
 
-    def show_svg_viewer(self, svg_file: str):
+    def show_svg_viewer(self, mermaid_text: str):
         """Display SVG file in a popup viewer window."""
         try:
-            viewer = SVGViewerDialog(svg_file, parent=self)
-            viewer.show()
+            new_viewer = SVGViewerDialog(mermaid_text, parent=None)            
+            new_viewer.setWindowFlags(Qt.WindowType.Window)            
+            new_viewer.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
+            new_viewer.destroyed.connect(lambda: self.viewers.remove(new_viewer))            
+            self.viewers.append(new_viewer)
+            new_viewer.show()
+        
         except Exception as e:
             self.add_status(f'✗ Failed to open viewer: {str(e)}', 'error')
 

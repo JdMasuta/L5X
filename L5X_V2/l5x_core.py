@@ -197,15 +197,28 @@ def generate_mermaid_flowchart(
     for targets in state_transitions.values():
         all_states.update(targets)
 
-    graph_type = 'stateDiagram' if True else 'flowchart'  # Change to False to use flowchart
+    graph_type = 'stateDiagram' if False else 'flowchart'  # Change to False to use flowchart
+
+    config_lines = [
+        '---',
+        'title: {title}'.format(title=title),
+        'config:',
+        '  layout: elk' if graph_type == 'flowchart' else '  layout: dagre',
+        # 'theme: base', # Use 'base' to allow full customization
+        # 'themeVariables:',
+        # '   primaryColor: #BBDEF0',
+        # '   primaryTextColor: #000000',
+        # '   primaryBorderColor: #7C7C7C',
+        # '   lineColor: #F85A3E',
+        # '   secondaryColor: #006100',
+        # '   tertiaryColor: #fff',
+        '---',
+        ''
+        'flowchart TB' if graph_type == 'flowchart' else 'stateDiagram-v2',
+    ]
 
     if graph_type == 'flowchart':
-        lines = ['---',
-                'title: {title}'.format(title=title),
-                'config:',
-                '  layout: elk',
-                '---', '',
-                'flowchart TB', '']
+        lines = config_lines
 
         # Generate node definitions
         # Format: S{state_num}[State {state_num}, {state_name}]
@@ -223,17 +236,13 @@ def generate_mermaid_flowchart(
         for source_state in sorted(state_transitions.keys()):
             for target_state in sorted(state_transitions[source_state]):
                 # Draw double line for 1 to 1 transitions
-                if (len(state_transitions[target_state]) == 1):
+                if (len(state_transitions[target_state]) == 0):
                     lines.append(f'    S{source_state} ==> S{target_state}')
                 else:
                     lines.append(f'    S{source_state} --> S{target_state}')
 
     elif graph_type == 'stateDiagram':
-        lines = ['---',
-                'title: {title}'.format(title=title),
-                '---', '',
-                'stateDiagram-v2',
-                '    direction TB', '']
+        lines = config_lines
 
         # Generate node definitions
         # Format: State_{state_num} : State {state_num}, {state_name}
@@ -311,6 +320,11 @@ def render_mermaid_to_svg(
         else:
             svg_path = Path(output_svg_file)
 
+        # Check if SVG already exists
+        # If so, remove it to avoid conflicts
+        if svg_path.exists():
+            svg_path.unlink()
+
         progress(f"Rendering diagram to SVG: {svg_path.name}")
 
         # Render using mermaid-cli
@@ -320,7 +334,6 @@ def render_mermaid_to_svg(
             output_format='svg',
             background_color='white',
             viewport={'width': 1200, 'height': 800},
-            #mermaid_config={"layout": "elk"},
         )
 
         # mermaid-cli adds -1 suffix when extracting from markdown
@@ -438,19 +451,31 @@ def generate_state_diagram(
         # Find STATE LOGIC section
         state_logic_index = find_state_logic_section(rll_content)
 
-        # Auto-detect tag name if not provided
+        # Auto-detect tag name if not provided; Should be the first tag on state_logic_index rung
         if tag_name is None:
             progress("Auto-detecting state tag...")
             # Try to find a StateLogic tag
-            for tag_name_candidate in prj.controller.tags.names:
-                try:
-                    tag = prj.controller.tags[tag_name_candidate]
-                    if tag.data_type == 'StateLogic':
-                        tag_name = tag_name_candidate
-                        progress(f"Auto-detected state tag: {tag_name}")
-                        break
-                except:
-                    continue
+            # Get the rung at state_logic_index
+            state_logic_rung = rll_content[state_logic_index + 1]
+            text = state_logic_rung.find('Text')
+            if text is not None:
+                text_cdata = text.find('CDATAContent')
+                if text_cdata is not None and text_cdata.text:
+                    logic = text_cdata.text.strip()
+                    xic_match = re.match(r'XIC\(([^)]+)\)', logic)
+                    progress("Logic: {logic} xic_match: {xic_match}".format(logic=logic, xic_match=xic_match))
+                    if xic_match:
+                        tag_reference = xic_match.group(1)
+                        tag_name_candidate = tag_reference.split('.')[0]
+                        try:
+                            tag = prj.controller.tags[tag_name_candidate]
+                            progress(f"Checking tag: {tag_name_candidate}")
+                            # Tag should have a '.ST' member
+                            if 'ST' in tag.names:
+                                tag_name = tag_name_candidate
+                                progress(f"Auto-detected state tag: {tag_name}")
+                        except:
+                            pass
 
         if tag_name is None:
             raise ValueError("Could not auto-detect state tag. Please specify tag_name parameter.")
