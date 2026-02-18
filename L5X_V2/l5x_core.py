@@ -558,3 +558,35 @@ def generate_state_diagram(
             'diagram_text': '',
             'error': str(e)
         }
+
+
+def main():
+    """
+    Main function for testing the library functions.
+
+    This can be used for quick testing or as a starting point for a CLI script.
+    """
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Generate state diagram from L5X file")
+    parser.add_argument('input_file', help="Path to input .L5X file")
+    parser.add_argument('output_file', help="Path to output .md file for Mermaid diagram")
+    parser.add_argument('--tag', help="Optional state tag name (auto-detected if not provided)")
+    args = parser.parse_args()
+
+    result = generate_state_diagram(
+        input_file=args.input_file,
+        output_file=args.output_file,
+        tag_name=args.tag,
+        progress_callback=print
+    )
+
+    if result['success']:
+        print(f"Diagram generated successfully with {len(result['states'])} states and {result['transitions_count']} transitions.")
+    else:
+        print(f"Failed to generate diagram: {result['message']}")
+        if result['error']:
+            print(f"Error details: {result['error']}")
+
+if __name__ == "__main__":
+    main()
