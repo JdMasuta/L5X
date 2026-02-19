@@ -88,6 +88,29 @@ def find_state_logic_section(rll_content) -> Optional[int]:
                 return i
     return None
 
+# Here we create a new method of finding the state logic section
+# We are looking for the rung that contains an OTU instruction called "S3_State_Logic"
+def find_state_logic_section_by_otu(rll_content) -> Optional[int]:
+    """
+    Find the index of the STATE LOGIC section by looking for an OTU instruction.
+
+    Args:
+        rll_content: RLLContent XML element containing rungs
+
+    Returns:
+        Index of STATE LOGIC marker rung or None if not found
+    """
+    for i, rung in enumerate(rll_content):
+        text = rung.find('Text')
+        if text is not None:
+            text_cdata = text.find('CDATAContent')
+            if text_cdata is not None and text_cdata.text:
+                logic = text_cdata.text.strip()
+                otu_match = re.search(r'OTU\(([^)]+)\)', logic)
+                if otu_match and 'S3_State_Logic' in otu_match.group(1):
+                    return i
+    return None
+
 
 def parse_rung_logic(rung) -> Tuple[Optional[int], List[int]]:
     """
@@ -426,6 +449,7 @@ def generate_state_diagram(
         rll_content = None
         routine_name = None
         program_name = None
+        state_logic_index = None
 
         for prog_name in prj.programs.names:
             program = prj.programs[prog_name]
@@ -435,7 +459,8 @@ def generate_state_diagram(
                     temp_rll = routine.find('RLLContent')
                     if temp_rll is not None:
                         # Check if this routine has STATE LOGIC
-                        if find_state_logic_section(temp_rll) is not None:
+                        state_logic_index = find_state_logic_section_by_otu(temp_rll)
+                        if state_logic_index is not None:
                             rll_content = temp_rll
                             routine_name = routine.attrib.get('Name')
                             program_name = prog_name
@@ -447,9 +472,6 @@ def generate_state_diagram(
             raise ValueError("No STATE LOGIC section found in file")
 
         progress(f"Found STATE LOGIC in program: {program_name}, Routine: {routine_name}")
-
-        # Find STATE LOGIC section
-        state_logic_index = find_state_logic_section(rll_content)
 
         # Auto-detect tag name if not provided; Should be the first tag on state_logic_index rung
         if tag_name is None:
