@@ -1,0 +1,52 @@
+<!doctype html>
+<html>
+  <head>
+    <!-- We use a CDN here; for a 100% offline exe, you would bundle the .js file Inject Mermaid.js and your diagram into a template -->
+    <!-- <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mermaid-js/layout-elk@0/dist/mermaid-layout-elk.esm.min.mjs"></script> -->
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+
+    <style>
+      body {
+        background-color: #64ccc9;
+        margin: 0;
+        padding: 20px;
+        font-family: sans-serif;
+      }
+      #loading-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: #64ccc9;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        z-index: 1000;
+      }
+      .spinner {
+        width: 50px;
+        height: 50px;
+        border: 5px solid rgba(255, 255, 255, 0.3);
+        border-radius: 50%;
+        border-top-color: #fff;
+        animation: spin 1s ease-in-out infinite;
+      }
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="loading-overlay">
+      <div class="spinner"></div>
+      <p>Loading Diagram Engine...</p>
+    </div>
+
+    <pre class="mermaid" id="diagram">[mermaid_text]</pre>
+  </body>
+</html>
