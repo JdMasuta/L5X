@@ -197,12 +197,24 @@ class SVGViewerDialog(QWidget):
 
         layout.addWidget(self.browser)
 
-        # Add close button
+        # Button row
+        btn_layout = QHBoxLayout()
+
+        copy_btn = QPushButton('Copy Mermaid')
+        copy_btn.clicked.connect(self.copy_mermaid_to_clipboard)
+        btn_layout.addWidget(copy_btn)
+
         close_btn = QPushButton('Close')
         close_btn.clicked.connect(self.close)
-        layout.addWidget(close_btn)
+        btn_layout.addWidget(close_btn)
+
+        layout.addLayout(btn_layout)
 
         self.setLayout(layout)
+
+    def copy_mermaid_to_clipboard(self):
+        """Copy the Mermaid diagram text to the system clipboard."""
+        QApplication.clipboard().setText(self.mermaid_text)
 
 
 class L5XMermaidGUI(QMainWindow):
