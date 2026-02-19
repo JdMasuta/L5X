@@ -226,8 +226,8 @@ def generate_mermaid_flowchart(
             name = state_names.get(state_num, f"State {state_num}")
             # Clean up name for display (limit length, replace newlines)
             clean_name = name.replace('\n', ' - ')[:60]
-            clean_name = clean_name.replace('(', '<')[:60]
-            clean_name = clean_name.replace(')', '>')[:60]
+            clean_name = clean_name.replace('(', '~')[:60]
+            clean_name = clean_name.replace(')', '~')[:60]
             lines.append(f'    S{state_num}[State {state_num}, {clean_name}]')
 
         lines.append('')  # Blank line between nodes and edges
