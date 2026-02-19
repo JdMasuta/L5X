@@ -15,7 +15,6 @@ import l5x
 import re
 from pathlib import Path
 from typing import Dict, List, Set, Tuple, Optional, Union, Callable, Any
-from mermaid_cli import render_mermaid_file_sync
 
 
 def extract_state_number(tag_reference: str) -> Optional[int]:
@@ -320,78 +319,16 @@ def render_mermaid_to_svg(
             - svg_file: str - Path to generated SVG file (empty on error)
             - error: Optional[str] - Error details if failed
     """
-    def progress(msg: str):
-        """Helper to call progress callback if provided."""
-        if progress_callback:
-            progress_callback(msg)
-
-    try:
-        markdown_path = Path(markdown_file)
-
-        # Check markdown file exists
-        if not markdown_path.exists():
-            return {
-                'success': False,
-                'message': f"Markdown file not found: {markdown_path}",
-                'svg_file': '',
-                'error': f"File not found: {markdown_path}"
-            }
-
-        # Auto-generate SVG filename if not provided
-        if output_svg_file is None:
-            svg_path = markdown_path.with_suffix('.svg')
-        else:
-            svg_path = Path(output_svg_file)
-
-        # Check if SVG already exists
-        # If so, remove it to avoid conflicts
-        if svg_path.exists():
-            svg_path.unlink()
-
-        progress(f"Rendering diagram to SVG: {svg_path.name}")
-
-        # Render using mermaid-cli
-        render_mermaid_file_sync(
-            input_file=str(markdown_path),
-            output_file=str(svg_path),
-            output_format='svg',
-            background_color='white',
-            viewport={'width': 1200, 'height': 800},
-        )
-
-        # mermaid-cli adds -1 suffix when extracting from markdown
-        # Check for both the requested filename and the -1 suffixed version
-        svg_path_with_suffix = svg_path.parent / f"{svg_path.stem}-1{svg_path.suffix}"
-
-        if svg_path_with_suffix.exists():
-            # Rename the -1 file to the expected name
-            svg_path_with_suffix.rename(svg_path)
-
-        # Verify SVG was created
-        if not svg_path.exists():
-            return {
-                'success': False,
-                'message': "SVG file was not created",
-                'svg_file': '',
-                'error': "Rendering completed but output file not found"
-            }
-
-        progress(f"SVG rendered successfully: {svg_path.name}")
-
-        return {
-            'success': True,
-            'message': f"Diagram rendered to {svg_path.name}",
-            'svg_file': str(svg_path),
-            'error': None
-        }
-
-    except Exception as e:
-        return {
-            'success': False,
-            'message': f"Failed to render diagram: {str(e)}",
-            'svg_file': '',
-            'error': str(e)
-        }
+    # SVG rendering via mermaid-cli (Node.js) has been removed.
+    # Diagrams are now rendered in the GUI viewer using mermaid.js loaded from CDN.
+    markdown_path = Path(markdown_file)
+    return {
+        'success': False,
+        'message': "CLI-based SVG rendering is not available. Use the diagram viewer in the GUI.",
+        'svg_file': '',
+        'mermaid_text': markdown_path.read_text(encoding='utf-8') if markdown_path.exists() else '',
+        'error': None
+    }
 
 
 def generate_state_diagram(
