@@ -220,3 +220,6 @@ __marimo__/
 
 # Debug
 debug_mermaid.txt
+
+# Remove V1 from git tracking since it's no longer needed and just taking up space
+L5X_V1/
