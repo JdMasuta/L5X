@@ -9,7 +9,17 @@ Author: Generated with Claude Code
 """
 
 import sys
+import os
 from pathlib import Path
+
+
+def _resource_path(relative_path):
+    """Return absolute path to a resource, compatible with both dev and PyInstaller bundle."""
+    if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
+        base = sys._MEIPASS
+    else:
+        base = Path(__file__).parent
+    return os.path.join(base, relative_path)
 
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
@@ -96,10 +106,10 @@ QLineEdit {
 """
 
 def generate_html(mermaid_text):
-    # 1. Load your separate files
-    with open("template.html", "r") as f:
+    # 1. Load your separate files (works in both dev and PyInstaller bundle)
+    with open(_resource_path("template.html"), "r") as f:
         html_template = f.read()
-    with open("script.js", "r") as f:
+    with open(_resource_path("script.js"), "r") as f:
         js_code = f.read()
 
     html_template = html_template.replace("[mermaid_text]", mermaid_text)
