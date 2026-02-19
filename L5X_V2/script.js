@@ -49,15 +49,13 @@ async function renderDiagram() {
     const elkSuccess = await loadELKRender();
     if (!elkSuccess) {
       console.warn("ELK render failed, attempting dagre render as fallback...");
-      const stdSuccess = await loadStandardRender();
+      const stdSuccess = false; // await loadStandardRender();
       if (!stdSuccess) {
         console.error(
           "Both standard and ELK renders failed. Diagram cannot be displayed.",
         );
         document.getElementById("loading-overlay").style.display = "none";
       }
-    } else {
-      document.getElementById("loading-overlay").style.display = "none";
     }
   } catch (stdErr) {
     console.error("Error during standard render:", stdErr);
@@ -78,9 +76,11 @@ async function renderDiagram() {
 
 async function main() {
   // Wait until the CDN files are actually parsed
-  while (typeof mermaid === "undefined" || typeof elkLayouts === "undefined") {
-    await new Promise((r) => setTimeout(r, 50));
-  }
+  // If only mermaid is not undefined, we can try to render with the standard renderer as a fallback
+  // while (typeof mermaid === "undefined" && typeof elkLayouts === "undefined") {
+  //   console.log("Waiting for Mermaid or ELK to load...");
+  //   await new Promise((r) => setTimeout(r, 50));
+  // }
   // Use a timer instead
   // await new Promise((r) => setTimeout(r, 500));
 
