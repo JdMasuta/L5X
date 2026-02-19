@@ -1,4 +1,3 @@
 l5x
 PySide6
-mermaid-cli
 pyinstaller
