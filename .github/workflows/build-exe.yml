@@ -1,0 +1,35 @@
+name: Build Windows EXE
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        working-directory: L5X_V2
+        run: pip install -r requirements.txt
+
+      - name: Build with PyInstaller
+        working-directory: L5X_V2
+        run: pyinstaller L5X_Mermaid.spec --noconfirm
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: L5X-Mermaid-Windows
+          path: L5X_V2/dist/L5X Mermaid/
+          if-no-files-found: error
