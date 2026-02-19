@@ -8,20 +8,17 @@ datas = [
 binaries = []
 hiddenimports = ['l5x_core']
 
-# Op 2: Collect only the PySide6 submodules actually used by the application,
-# instead of collect_all('PySide6') which bundles every submodule (QML, 3D,
-# Multimedia, SQL, Bluetooth, etc.) regardless of whether it is needed.
-for _pyside6_mod in [
-    'PySide6.QtWidgets',
-    'PySide6.QtCore',
-    'PySide6.QtGui',
-    'PySide6.QtWebEngineWidgets',
-    'PySide6.QtWebEngineCore',
-]:
-    _tmp = collect_all(_pyside6_mod)
-    datas     += _tmp[0]
-    binaries  += _tmp[1]
-    hiddenimports += _tmp[2]
+# Op 2: collect_all('PySide6') is kept for datas/binaries so that all Qt
+# native libraries and plugins are properly collected via PyInstaller's
+# top-level PySide6 hook (there are no per-submodule hooks, so calling
+# collect_all on individual submodules leaves binaries like QtWebEngineCore
+# uncollected).  We intentionally discard the hiddenimports list it returns
+# and instead rely on PyInstaller's import analysis + the excludes list below
+# to keep the Python layer lean.
+_tmp = collect_all('PySide6')
+datas    += _tmp[0]
+binaries += _tmp[1]
+# hiddenimports intentionally not extended here — let Analysis + excludes decide
 
 
 a = Analysis(
