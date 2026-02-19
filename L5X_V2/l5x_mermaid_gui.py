@@ -10,12 +10,13 @@ Author: Generated with Claude Code
 
 import sys
 from pathlib import Path
+import os
 
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QLineEdit, QPushButton, QTextEdit, QFileDialog
 )
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, Signal, QUrl
 from PySide6.QtWebEngineWidgets import QWebEngineView
 from PySide6.QtGui import QFont
 
@@ -94,6 +95,22 @@ QLineEdit {
 }
 """
 
+def generate_html(mermaid_text):
+    # 1. Load your separate files
+    with open("template.html", "r") as f:
+        html_template = f.read()
+    with open("script.js", "r") as f:
+        js_code = f.read()
+
+    html_template = html_template.replace("[mermaid_text]", mermaid_text)
+    script_tag = f"<script>\n{js_code}\n</script>"
+    final_html = html_template.replace("</body>", f"{script_tag}</body>")
+
+    # Debug: Save final HTML to a temp file for inspection
+    with open("/mnt/c/Users/meeseyj/Downloads/index.html", "w") as f:
+        f.write(final_html)
+
+    return final_html
 
 class DropZoneWidget(QLabel):
     """Custom label widget that accepts drag and drop of .L5X files."""
@@ -156,8 +173,8 @@ class SVGViewerDialog(QWidget):
         self.setWindowFlags(Qt.Window)
         self.mermaid_text = mermaid_text
         # Print mermaid text to temp file for debugging
-        with open("debug_mermaid.txt", "w") as f:
-            f.write(self.mermaid_text)
+        # with open("debug_mermaid.txt", "w") as f:
+        #     f.write(self.mermaid_text)
         self.initUI()
 
     def initUI(self):
@@ -172,91 +189,10 @@ class SVGViewerDialog(QWidget):
         # Use QWebEngineView to render instead of QSvgWidget
         self.browser = QWebEngineView()
         
-        # Inject Mermaid.js and your diagram into a template
-        # We use a CDN here; for a 100% offline exe, you would bundle the .js file
-        html_template = f"""
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <style>
-                body {{ background-color: #64CCC9; margin: 0; padding: 20px; font-family: sans-serif; }}
-                #loading-overlay {{
-                    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-                    background: #64CCC9; display: flex; flex-direction: column;
-                    justify-content: center; align-items: center; z-index: 1000;
-                }}
-                .spinner {{
-                    width: 50px; height: 50px; border: 5px solid rgba(255,255,255,0.3);
-                    border-radius: 50%; border-top-color: #fff; animation: spin 1s ease-in-out infinite;
-                }}
-                @keyframes spin {{ to {{ transform: rotate(360deg); }} }}
-            </style>
-        </head>
-        <body>
-            <div id="loading-overlay">
-                <div class="spinner"></div>
-                <p>Loading Diagram Engine...</p>
-            </div>
-
-            <pre class="mermaid" id="diagram">
-                {self.mermaid_text}
-            </pre>
-
-            <script type="module">
-                import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
-                import elkLayouts from 'https://cdn.jsdelivr.net/npm/@mermaid-js/layout-elk@0/dist/mermaid-layout-elk.esm.min.mjs';
-
-                async function renderDiagram() {{
-                    // Wait until the CDN files are actually parsed
-                    while (typeof mermaid === 'undefined' || typeof elkLayouts === 'undefined') {{
-                        await new Promise(r => setTimeout(r, 50));
-                    }}
-
-                    try {{
-                        // Explicitly register the loader
-                        await mermaid.registerLayoutLoaders([elkLayouts]);
-
-                        // Initialize without auto-starting
-                        mermaid.initialize({{ 
-                            startOnLoad: false, 
-                            layout: 'elk',
-                            look: 'handCoded',
-                            securityLevel: 'loose',
-                            flowchart: {{ defaultRenderer: 'elk' }} // Double-force the renderer
-                        }});
-
-                        // Manually run the renderer now that we are 100% sure ELK is registered
-                        await mermaid.run();
-                        console.log("ELK Layout loaded successfully.");                        
-                        document.getElementById('loading-overlay').style.display = 'none';
-                    
-                    }} catch (err) {{
-                        console.error("ELK Layout failed to load:", err[0], err[1]);
-                        // Fallback to standard render if ELK fails
-
-                        // Initialize without auto-starting
-                        mermaid.initialize({{ 
-                            startOnLoad: true, 
-                            layout: 'dagre',
-                            securityLevel: 'loose',
-                        }});
-
-                        try {{
-                            await mermaid.run();
-                            console.log("Standard Layout loaded successfully.");
-                        }} catch (err2) {{
-                            console.error("Standard Layout failed to load:", err2);
-                            }} 
-
-                        document.getElementById('loading-overlay').style.display = 'none';
-                    }}
-                }}
-                renderDiagram();
-            </script>
-        </body>
-        </html>
-        """
-        self.browser.setHtml(html_template)
+        html_template = generate_html(self.mermaid_text)
+        base_dir = Path(__file__).parent.resolve()
+        base_url = QUrl.fromLocalFile(str(base_dir) + '/')
+        self.browser.setHtml(html_template, base_url)
 
         layout.addWidget(self.browser)
 
