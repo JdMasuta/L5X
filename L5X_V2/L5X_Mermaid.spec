@@ -8,8 +8,20 @@ datas = [
 binaries = []
 hiddenimports = ['l5x_core']
 
-tmp_ret = collect_all('PySide6')
-datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
+# Op 2: Collect only the PySide6 submodules actually used by the application,
+# instead of collect_all('PySide6') which bundles every submodule (QML, 3D,
+# Multimedia, SQL, Bluetooth, etc.) regardless of whether it is needed.
+for _pyside6_mod in [
+    'PySide6.QtWidgets',
+    'PySide6.QtCore',
+    'PySide6.QtGui',
+    'PySide6.QtWebEngineWidgets',
+    'PySide6.QtWebEngineCore',
+]:
+    _tmp = collect_all(_pyside6_mod)
+    datas     += _tmp[0]
+    binaries  += _tmp[1]
+    hiddenimports += _tmp[2]
 
 
 a = Analysis(
@@ -21,9 +33,32 @@ a = Analysis(
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=[],
+    # Op 3: Explicitly exclude unused PySide6 submodules and heavy stdlib/
+    # third-party packages that are not needed by this application.
+    excludes=[
+        # Unused PySide6 submodules
+        'PySide6.Qt3DAnimation', 'PySide6.Qt3DCore', 'PySide6.Qt3DExtras',
+        'PySide6.Qt3DInput', 'PySide6.Qt3DLogic', 'PySide6.Qt3DRender',
+        'PySide6.QtBluetooth', 'PySide6.QtCharts', 'PySide6.QtConcurrent',
+        'PySide6.QtDataVisualization', 'PySide6.QtDesigner', 'PySide6.QtHelp',
+        'PySide6.QtLocation', 'PySide6.QtMultimedia', 'PySide6.QtMultimediaWidgets',
+        'PySide6.QtNfc', 'PySide6.QtOpenGL', 'PySide6.QtOpenGLWidgets',
+        'PySide6.QtPositioning', 'PySide6.QtPrintSupport', 'PySide6.QtQml',
+        'PySide6.QtQuick', 'PySide6.QtQuick3D', 'PySide6.QtQuickControls2',
+        'PySide6.QtQuickWidgets', 'PySide6.QtRemoteObjects', 'PySide6.QtScxml',
+        'PySide6.QtSensors', 'PySide6.QtSerialBus', 'PySide6.QtSerialPort',
+        'PySide6.QtSql', 'PySide6.QtStateMachine', 'PySide6.QtSvg',
+        'PySide6.QtSvgWidgets', 'PySide6.QtTest', 'PySide6.QtUiTools',
+        'PySide6.QtWebChannel', 'PySide6.QtWebSockets', 'PySide6.QtXml',
+        # Unused stdlib modules
+        'tkinter', '_tkinter', 'lib2to3', 'pydoc', 'doctest',
+        'unittest', 'test', 'distutils',
+        # Unused heavy packages that could be pulled in transitively
+        'matplotlib', 'numpy', 'scipy', 'pandas', 'PIL', 'cv2',
+        'PyQt5', 'PyQt6', 'wx',
+    ],
     noarchive=False,
-    optimize=0,
+    optimize=2,  # Op 4: Strip docstrings and assert statements from bundled .pyc files
 )
 pyz = PYZ(a.pure)
 
@@ -51,6 +86,18 @@ coll = COLLECT(
     a.datas,
     strip=False,
     upx=True,
-    upx_exclude=[],
+    # Op 5: Exclude Chromium/QtWebEngine binaries from UPX compression.
+    # These large binaries compress poorly with UPX, and compressing them
+    # adds decompression overhead at startup without meaningful size savings.
+    upx_exclude=[
+        'QtWebEngineCore.dll',
+        'QtWebEngineProcess.exe',
+        'icudtl.dat',
+        'qwebengine_devtools_resources.pak',
+        'qwebengine_resources.pak',
+        'qwebengine_resources_100p.pak',
+        'qwebengine_resources_200p.pak',
+        'qtwebengine_locales',
+    ],
     name='L5X Mermaid',
 )
