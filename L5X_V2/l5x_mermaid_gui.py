@@ -10,7 +10,6 @@ Author: Generated with Claude Code
 
 import sys
 from pathlib import Path
-import os
 
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
@@ -18,6 +17,7 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt, Signal, QUrl
 from PySide6.QtWebEngineWidgets import QWebEngineView
+from PySide6.QtWebEngineCore import QWebEngineSettings
 from PySide6.QtGui import QFont
 
 # Import from l5x_core library
@@ -188,6 +188,7 @@ class SVGViewerDialog(QWidget):
 
         # Use QWebEngineView to render instead of QSvgWidget
         self.browser = QWebEngineView()
+        self.browser.settings().setAttribute(QWebEngineSettings.WebAttribute.LocalContentCanAccessRemoteUrls, True)
         
         html_template = generate_html(self.mermaid_text)
         base_dir = Path(__file__).parent.resolve()
@@ -553,6 +554,8 @@ class L5XMermaidGUI(QMainWindow):
 
 def main():
     """Main entry point for the application."""
+    sys.argv.append("--disable-web-security")  # Disable web security to allow local file access in QWebEngineView
+    sys.argv.append("--allow-file-access-from-files")  # Allow file access from local files
     app = QApplication(sys.argv)
 
     # Set application-wide font - uses generic sans-serif for cross-platform compatibility
