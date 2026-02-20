@@ -60,7 +60,7 @@ Then:
 
 Generate a state diagram from an L5X file:
 ```bash
-python l5x_state_diagram.py input.L5X
+python l5x_core.py input.L5X
 ```
 
 This will create `input_state_diagram.md` in the same directory.
@@ -69,21 +69,21 @@ This will create `input_state_diagram.md` in the same directory.
 
 Specify a custom output file:
 ```bash
-python l5x_state_diagram.py input.L5X -o my_diagram.md
+python l5x_core.py input.L5X -o my_diagram.md
 ```
 
 ### Specify State Tag Name
 
 If your L5X file has multiple StateLogic tags, specify which one to use:
 ```bash
-python l5x_state_diagram.py input.L5X -t _A28_PH
+python l5x_core.py input.L5X -t _A28_PH
 ```
 
 ### Help
 
 View all options:
 ```bash
-python l5x_state_diagram.py --help
+python l5x_core.py --help
 ```
 
 ## How It Works
@@ -148,7 +148,7 @@ The output markdown file can be viewed in:
 
 Your L5X file must contain:
 1. A routine with ladder logic (RLL type)
-2. A rung comment containing "STATE LOGIC" to mark the section
+2. A rung containing "S3_State_Logic" OTU to mark the section
 3. State machine implemented with:
    - State bits in a tag (commonly of type `StateLogic`)
    - XIC instructions to check current state
@@ -158,13 +158,13 @@ Your L5X file must contain:
 
 ### "No STATE LOGIC section found"
 
-Your L5X file doesn't contain a rung comment with "STATE LOGIC". Check your ladder logic for the state machine section.
+Your L5X file doesn't contain a rung with the "S3_State_Logic" OTU. Check your ladder logic for the state machine section.
 
 ### "Could not auto-detect state tag"
 
 The tool couldn't find a StateLogic tag. Manually specify the tag name:
 ```bash
-python l5x_state_diagram.py input.L5X -t YOUR_TAG_NAME
+python l5x_core.py input.L5X -t YOUR_TAG_NAME
 ```
 
 ### "Invalid L5X file"
@@ -176,7 +176,7 @@ The file is not a valid L5X export. Ensure you exported the routine from Studio 
 ```
 L5X/
 ├── l5x_mermaid_gui.py          # GUI application
-├── l5x_state_diagram.py        # Command-line tool
+├── l5x_core.py        # Command-line tool
 ├── README.md                   # This file
 ├── CLAUDE.md                   # Development notes and research
 ├── data/                       # Sample L5X files
@@ -199,7 +199,7 @@ See `CLAUDE.md` for detailed notes on:
 
 Test the tool with the included sample file:
 ```bash
-python l5x_state_diagram.py data/_A28_PalletHandler_Routine_RLL.L5X
+python l5x_core.py data/_A28_PalletHandler_Routine_RLL.L5X
 ```
 
 Expected output:
