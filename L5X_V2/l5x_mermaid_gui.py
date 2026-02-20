@@ -10,6 +10,8 @@ Author: Generated with Claude Code
 
 import sys
 import os
+import webbrowser
+import tempfile
 from pathlib import Path
 
 
@@ -25,9 +27,7 @@ from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QLineEdit, QPushButton, QTextEdit, QFileDialog
 )
-from PySide6.QtCore import Qt, Signal, QUrl
-from PySide6.QtWebEngineWidgets import QWebEngineView
-from PySide6.QtWebEngineCore import QWebEngineSettings
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QFont
 
 # Import from l5x_core library
@@ -116,10 +116,6 @@ def generate_html(mermaid_text):
     script_tag = f"<script>\n{js_code}\n</script>"
     final_html = html_template.replace("</body>", f"{script_tag}</body>")
 
-    # Debug: Save final HTML to a temp file for inspection
-    # with open("/mnt/c/Users/meeseyj/Downloads/index.html", "w") as f:
-    #     f.write(final_html)
-
     return final_html
 
 class DropZoneWidget(QLabel):
@@ -175,58 +171,6 @@ class DropZoneWidget(QLabel):
             self.parent().parent().browse_input_file()
 
 
-class SVGViewerDialog(QWidget):
-    """Popup window for displaying rendered SVG diagrams."""
-
-    def __init__(self, mermaid_text=str, parent=None):
-        super().__init__(parent)
-        self.setWindowFlags(Qt.Window)
-        self.mermaid_text = mermaid_text
-        # Print mermaid text to temp file for debugging
-        # with open("debug_mermaid.txt", "w") as f:
-        #     f.write(self.mermaid_text)
-        self.initUI()
-
-    def initUI(self):
-        """Initialize the viewer UI."""
-        self.setWindowTitle(f'Diagram Preview')
-        self.setMinimumSize(800, 600)
-
-        # Create layout
-        layout = QVBoxLayout()
-        layout.setContentsMargins(0, 0, 0, 0)
-
-        # Use QWebEngineView to render instead of QSvgWidget
-        self.browser = QWebEngineView()
-        self.browser.settings().setAttribute(QWebEngineSettings.WebAttribute.LocalContentCanAccessRemoteUrls, True)
-        
-        html_template = generate_html(self.mermaid_text)
-        base_dir = Path(__file__).parent.resolve()
-        base_url = QUrl.fromLocalFile(str(base_dir) + '/')
-        self.browser.setHtml(html_template, base_url)
-
-        layout.addWidget(self.browser)
-
-        # Button row
-        btn_layout = QHBoxLayout()
-
-        copy_btn = QPushButton('Copy Mermaid')
-        copy_btn.clicked.connect(self.copy_mermaid_to_clipboard)
-        btn_layout.addWidget(copy_btn)
-
-        close_btn = QPushButton('Close')
-        close_btn.clicked.connect(self.close)
-        btn_layout.addWidget(close_btn)
-
-        layout.addLayout(btn_layout)
-
-        self.setLayout(layout)
-
-    def copy_mermaid_to_clipboard(self):
-        """Copy the Mermaid diagram text to the system clipboard."""
-        QApplication.clipboard().setText(self.mermaid_text)
-
-
 class L5XMermaidGUI(QMainWindow):
     """Main application window for L5X Mermaid diagram generator."""
 
@@ -234,7 +178,7 @@ class L5XMermaidGUI(QMainWindow):
         super().__init__()
         self.input_file = None
         self.output_file = None
-        self.viewers = []
+        self.last_mermaid_text = None
         self.initUI()
 
     def initUI(self):
@@ -290,11 +234,20 @@ class L5XMermaidGUI(QMainWindow):
 
         main_layout.addLayout(output_layout)
 
-        # Generate button
+        # Action buttons row
+        btn_layout = QHBoxLayout()
+
         self.generate_btn = QPushButton('Generate Diagram')
         self.generate_btn.setEnabled(False)
         self.generate_btn.clicked.connect(self.generate_diagram)
-        main_layout.addWidget(self.generate_btn)
+        btn_layout.addWidget(self.generate_btn)
+
+        self.copy_btn = QPushButton('Copy Mermaid')
+        self.copy_btn.setEnabled(False)
+        self.copy_btn.clicked.connect(self.copy_mermaid_to_clipboard)
+        btn_layout.addWidget(self.copy_btn)
+
+        main_layout.addLayout(btn_layout)
 
         # Status output box
         status_label = QLabel('Status:')
@@ -317,12 +270,6 @@ class L5XMermaidGUI(QMainWindow):
         self.raise_()
         self.activateWindow()
         return super().mousePressEvent(event)
-    
-    def closeEvent(self, event):
-        """Handle application close event - close all viewer windows."""
-        for viewer in self.viewers:
-            viewer.close()
-        event.accept()
 
     def on_file_dropped(self, filepath):
         """Handle file drop/selection event."""
@@ -435,8 +382,9 @@ class L5XMermaidGUI(QMainWindow):
         if tag_name:
             self.add_status(f'Using tag: {tag_name}', 'info')
 
-        # Disable generate button during processing
+        # Disable buttons during processing
         self.generate_btn.setEnabled(False)
+        self.copy_btn.setEnabled(False)
         self.add_status('', 'info')  # Blank line
 
         try:
@@ -458,40 +406,19 @@ class L5XMermaidGUI(QMainWindow):
                 self.add_status('', 'info')  # Blank line
                 self.add_status(f'✓ Success! Diagram saved to: {self.output_file}', 'success')
 
-                # Disable automatic rendering for now
-                if False:  # Change to False to disable automatic rendering
-                    # Automatically render to SVG
-                    self.add_status('', 'info')  # Blank line
-                    self.add_status('Rendering diagram to SVG...', 'info')
-
-                    render_result = render_mermaid_to_svg(
-                        markdown_file=self.output_file,
-                        output_svg_file=None,  # Auto-generate filename
-                        progress_callback=lambda msg: self.add_status(msg, 'info')
-                    )
-
-                    if render_result['success']:
-                        svg_file = render_result['svg_file']
-                        self.add_status(f'✓ SVG saved to: {svg_file}', 'success')
-                        self.show_svg_viewer(render_result['mermaid_text'])
-                    else:
-                        self.add_status(f'✗ Rendering failed: {render_result["message"]}', 'error')
-                        if render_result.get('error'):
-                            self.add_status(f'   Details: {render_result["error"]}', 'error')
-            
-                # Get stringified mermaid text for viewer
+                # Read and clean mermaid text from output file
                 with open(self.output_file, 'r', encoding='utf-8') as f:
                     mermaid_text = f.read()
-                    f.close()
-                # Remove code fences if present
                 if mermaid_text.startswith('# State Logic Diagram'):
-                    # Remove header line if present
                     mermaid_text = '\n'.join(mermaid_text.splitlines()[2:])
-                    mermaid_text = mermaid_text.replace('```mermaid', '').replace('```', '').strip()    
+                    mermaid_text = mermaid_text.replace('```mermaid', '').replace('```', '').strip()
 
-                # Display the rendered diagram in popup window
-                self.add_status('Opening diagram viewer...', 'info')
-                self.show_svg_viewer(mermaid_text)
+                self.last_mermaid_text = mermaid_text
+                self.copy_btn.setEnabled(True)
+
+                # Open diagram in system browser
+                self.add_status('Opening diagram in browser...', 'info')
+                self.open_in_browser(mermaid_text)
 
             else:
                 # Show errors
@@ -511,18 +438,25 @@ class L5XMermaidGUI(QMainWindow):
             # Re-enable generate button
             self.generate_btn.setEnabled(True)
 
-    def show_svg_viewer(self, mermaid_text: str):
-        """Display SVG file in a popup viewer window."""
+    def open_in_browser(self, mermaid_text: str):
+        """Write diagram HTML to a temp file and open it in the system browser."""
         try:
-            new_viewer = SVGViewerDialog(mermaid_text, parent=None)            
-            new_viewer.setWindowFlags(Qt.WindowType.Window)            
-            new_viewer.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
-            new_viewer.destroyed.connect(lambda: self.viewers.remove(new_viewer))            
-            self.viewers.append(new_viewer)
-            new_viewer.show()
-        
+            html = generate_html(mermaid_text)
+            with tempfile.NamedTemporaryFile(
+                mode='w', suffix='.html', delete=False, encoding='utf-8'
+            ) as f:
+                f.write(html)
+                tmp_path = f.name
+            webbrowser.open(f'file:///{tmp_path}')
+            self.add_status('Diagram opened in your default browser.', 'info')
         except Exception as e:
-            self.add_status(f'✗ Failed to open viewer: {str(e)}', 'error')
+            self.add_status(f'✗ Failed to open browser: {str(e)}', 'error')
+
+    def copy_mermaid_to_clipboard(self):
+        """Copy the last generated Mermaid diagram text to the system clipboard."""
+        if self.last_mermaid_text:
+            QApplication.clipboard().setText(self.last_mermaid_text)
+            self.add_status('Mermaid text copied to clipboard.', 'info')
 
     def run_l5x_generator(self, input_file, output_file, tag_name=None):
         """
@@ -576,8 +510,6 @@ class L5XMermaidGUI(QMainWindow):
 
 def main():
     """Main entry point for the application."""
-    sys.argv.append("--disable-web-security")  # Disable web security to allow local file access in QWebEngineView
-    sys.argv.append("--allow-file-access-from-files")  # Allow file access from local files
     app = QApplication(sys.argv)
 
     # Set application-wide font - uses generic sans-serif for cross-platform compatibility

@@ -47,6 +47,8 @@ a = Analysis(
         'PySide6.QtSql', 'PySide6.QtStateMachine', 'PySide6.QtSvg',
         'PySide6.QtSvgWidgets', 'PySide6.QtTest', 'PySide6.QtUiTools',
         'PySide6.QtWebChannel', 'PySide6.QtWebSockets', 'PySide6.QtXml',
+        # WebEngine removed entirely — viewer now opens in system browser
+        'PySide6.QtWebEngineWidgets', 'PySide6.QtWebEngineCore',
         # Unused stdlib modules
         'tkinter', '_tkinter', 'lib2to3', 'pydoc', 'doctest',
         'unittest', 'test', 'distutils',
@@ -83,18 +85,6 @@ coll = COLLECT(
     a.datas,
     strip=False,
     upx=True,
-    # Op 5: Exclude Chromium/QtWebEngine binaries from UPX compression.
-    # These large binaries compress poorly with UPX, and compressing them
-    # adds decompression overhead at startup without meaningful size savings.
-    upx_exclude=[
-        'QtWebEngineCore.dll',
-        'QtWebEngineProcess.exe',
-        'icudtl.dat',
-        'qwebengine_devtools_resources.pak',
-        'qwebengine_resources.pak',
-        'qwebengine_resources_100p.pak',
-        'qwebengine_resources_200p.pak',
-        'qtwebengine_locales',
-    ],
+    upx_exclude=[],
     name='L5X Mermaid',
 )
