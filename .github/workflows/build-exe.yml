@@ -23,6 +23,9 @@ jobs:
         working-directory: L5X_V2
         run: pip install -r requirements.txt
 
+      - name: Install UPX
+        run: choco install upx --no-progress -y
+
       - name: Build with PyInstaller
         working-directory: L5X_V2
         run: pyinstaller L5X_Mermaid.spec --noconfirm
