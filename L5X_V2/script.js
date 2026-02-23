@@ -1,15 +1,16 @@
 // This script is responsible for rendering the Mermaid diagram using the ELK layout engine.
 
 async function loadELKRender() {
-  const mermaid = (
-    await import("https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs")
-  ).default;
+  const mermaid =
+    await import("https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs");
+  console.error(mermaid);
   const elkLayouts = (
     await import("https://cdn.jsdelivr.net/npm/@mermaid-js/layout-elk@0/dist/mermaid-layout-elk.esm.min.mjs")
   ).default;
+  console.error(elkLayouts);
   try {
     // Explicitly register the loader
-    await mermaid.registerLayoutLoaders([elkLayouts]);
+    await mermaid.registerLayoutLoaders(elkLayouts);
 
     // Initialize without auto-starting
     mermaid.initialize({
