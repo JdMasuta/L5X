@@ -28,7 +28,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt, Signal, QUrl
 from PySide6.QtWebEngineWidgets import QWebEngineView
 from PySide6.QtWebEngineCore import QWebEngineSettings
-from PySide6.QtGui import QFont
+from PySide6.QtGui import QFont, QIcon
 
 # Import from l5x_core library
 from l5x_core import generate_state_diagram, render_mermaid_to_svg
@@ -241,6 +241,7 @@ class L5XMermaidGUI(QMainWindow):
     def initUI(self):
         """Initialize the user interface."""
         self.setWindowTitle('L5X Mermaid')
+        self.setWindowIcon(QIcon("../dolphin.ico"))
         self.setFixedSize(600, 650)
 
         # Create central widget and main layout
