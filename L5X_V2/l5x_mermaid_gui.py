@@ -117,8 +117,9 @@ def generate_html(mermaid_text):
     final_html = html_template.replace("</body>", f"{script_tag}</body>")
 
     # Debug: Save final HTML to a temp file for inspection
-    # with open("/mnt/c/Users/meeseyj/Downloads/index.html", "w") as f:
-    #     f.write(final_html)
+    with open("/mnt/c/Users/meeseyj/Downloads/index.html", "w") as f:
+        f.write(final_html)
+        print('Debug: Final HTML saved to index.html', 'info')
 
     return final_html
 
