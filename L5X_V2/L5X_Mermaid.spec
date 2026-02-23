@@ -83,18 +83,5 @@ coll = COLLECT(
     a.datas,
     strip=False,
     upx=True,
-    # Op 5: Exclude Chromium/QtWebEngine binaries from UPX compression.
-    # These large binaries compress poorly with UPX, and compressing them
-    # adds decompression overhead at startup without meaningful size savings.
-    upx_exclude=[
-        'QtWebEngineCore.dll',
-        'QtWebEngineProcess.exe',
-        'icudtl.dat',
-        'qwebengine_devtools_resources.pak',
-        'qwebengine_resources.pak',
-        'qwebengine_resources_100p.pak',
-        'qwebengine_resources_200p.pak',
-        'qtwebengine_locales',
-    ],
     name='L5X Mermaid',
 )
