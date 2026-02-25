@@ -1,20 +1,45 @@
 // This script is responsible for rendering the Mermaid diagram using the ELK layout engine.
 
+async function loadMermaid() {
+  try {
+    const mermaid = (
+      await import("https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs")
+    ).default;
+    console.log("Mermaid loaded:", mermaid)
+      ? mermaid != undefined
+      : "Mermaid failed to load";
+    return mermaid;
+  } catch (err) {
+    console.error("Error loading Mermaid:", err);
+    return null;
+  }
+}
+
+async function loadELKLayouts() {
+  try {
+    const elkLayouts = (
+      await import("https://cdnjs.cloudflare.com/ajax/libs/mermaid-layout-elk/0.2.0/mermaid-layout-elk.esm.min.mjs")
+    ).default;
+    console.log("ELK Layouts loaded:", elkLayouts)
+      ? elkLayouts != undefined
+      : "ELK Layouts failed to load";
+    return elkLayouts;
+  } catch (err) {
+    console.error("Error loading ELK Layouts:", err);
+    return null;
+  }
+}
+
 async function loadELKRender() {
-  const mermaid =
-    await import("https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs");
-  console.error(mermaid);
-  const elkLayouts = (
-    await import("https://cdn.jsdelivr.net/npm/@mermaid-js/layout-elk@0/dist/mermaid-layout-elk.esm.min.mjs")
-  ).default;
-  console.error(elkLayouts);
+  const mermaid = await loadMermaid();
+  const elkLayouts = await loadELKLayouts();
   try {
     // Explicitly register the loader
     await mermaid.registerLayoutLoaders(elkLayouts);
 
     // Initialize without auto-starting
     mermaid.initialize({
-      startOnLoad: false,
+      startOnLoad: true,
       layout: "elk",
       look: "handCoded",
       securityLevel: "loose",
@@ -33,9 +58,7 @@ async function loadELKRender() {
 }
 
 async function loadStandardRender() {
-  const mermaid = (
-    await import("https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs")
-  ).default;
+  const mermaid = await loadMermaid();
   // Initialize without auto-starting
   mermaid.initialize({
     startOnLoad: true,
@@ -59,7 +82,7 @@ async function renderDiagram() {
     const elkSuccess = await loadELKRender();
     if (!elkSuccess) {
       console.warn("ELK render failed, attempting dagre render as fallback...");
-      const stdSuccess = false; // await loadStandardRender();
+      const stdSuccess = await loadStandardRender();
       if (!stdSuccess) {
         console.error(
           "Both standard and ELK renders failed. Diagram cannot be displayed.",
@@ -68,7 +91,7 @@ async function renderDiagram() {
       }
     }
   } catch (stdErr) {
-    console.error("Error during standard render:", stdErr);
+    console.error("Error during render:", stdErr);
     document.getElementById("loading-overlay").style.display = "none";
     // Add error info to the page for user visibility
     const errorDiv = document.createElement("div");
