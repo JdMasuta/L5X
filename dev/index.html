@@ -1,0 +1,229 @@
+<!doctype html>
+<html>
+  <head>
+    <!-- We use a CDN here; for a 100% offline exe, you would bundle the .js file Inject Mermaid.js and your diagram into a template -->
+    <!-- Use namespace -->
+    <script
+      type="module"
+      import mermaid from 'https://cdnjs.cloudflare.com/ajax/libs/mermaid/11.12.0/mermaid.min.js'
+    ></script>
+    <script
+      type="module"
+      import elkLayout from 'https://cdnjs.cloudflare.com/ajax/libs/mermaid-layout-elk/0.2.0/mermaid-layout-elk.esm.min.mjs'
+    ></script>
+    <!-- <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script> -->
+
+    <!-- Use the downloaded mermaid js file -->
+    <!-- <script type="module" src="mermaid.esm.min.mjs"></script>
+    <script type="module" src="mermaid-layout-elk.esm.min.mjs"></script> -->
+
+    <style>
+      body {
+        background-color: #64ccc9;
+        margin: 0;
+        padding: 20px;
+        font-family: sans-serif;
+      }
+      #loading-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: #64ccc9;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        z-index: 1000;
+      }
+      .spinner {
+        width: 50px;
+        height: 50px;
+        border: 5px solid rgba(255, 255, 255, 0.3);
+        border-radius: 50%;
+        border-top-color: #fff;
+        animation: spin 1s ease-in-out infinite;
+      }
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="loading-overlay">
+      <div class="spinner"></div>
+      <p>Loading Diagram Engine...</p>
+    </div>
+
+    <pre class="mermaid" id="diagram">---
+title: _N15_Pallet_Handler_Conveyor
+config:
+  layout: elk
+---
+flowchart TB
+    S1[State 1, Lost]
+    S2[State 2, Run To Check For Pallet]
+    S3[State 3, Ready to Receive - ~from PH~]
+    S4[State 4, Run Pallet from Pallet Handler]
+    S5[State 5, Run Pallet To End Of Conveyor]
+    S6[State 6, Ready To Send]
+    S7[State 7, Run Pallet Past End Of Conveyor]
+    S8[State 8, Pallet and/or Sheet - Ready for Robot Pick]
+    S9[State 9, Wait for Robot to exit zone]
+    S14[State 14, Request PH To Raise Pallet Off Conveyor For Run Check]
+
+    S1 --> S2
+    S1 --> S3
+    S1 --> S14
+    S2 --> S3
+    S2 --> S5
+    S3 --> S2
+    S3 --> S4
+    S3 --> S14
+    S4 --> S5
+    S5 --> S7
+    S5 --> S8
+    S6 --> S1
+    S6 --> S7
+    S7 --> S3
+    S8 --> S9
+    S9 --> S3
+    S9 --> S8
+    S14 --> S2</pre>
+  <script>
+// This script is responsible for rendering the Mermaid diagram using the ELK layout engine.
+
+async function loadMermaid() {
+  try {
+    const mermaid = (
+      await import("https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs")
+    ).default;
+    console.log("Mermaid loaded:", mermaid)
+      ? mermaid != undefined
+      : "Mermaid failed to load";
+    return mermaid;
+  } catch (err) {
+    console.error("Error loading Mermaid:", err);
+    return null;
+  }
+}
+
+async function loadELKLayouts() {
+  try {
+    const elkLayouts = (
+      await import("https://cdnjs.cloudflare.com/ajax/libs/mermaid-layout-elk/0.2.0/mermaid-layout-elk.esm.min.mjs")
+    ).default;
+    console.log("ELK Layouts loaded:", elkLayouts)
+      ? elkLayouts != undefined
+      : "ELK Layouts failed to load";
+    return elkLayouts;
+  } catch (err) {
+    console.error("Error loading ELK Layouts:", err);
+    return null;
+  }
+}
+
+async function loadELKRender() {
+  const mermaid = await loadMermaid();
+  const elkLayouts = await loadELKLayouts();
+  try {
+    // Explicitly register the loader
+    await mermaid.registerLayoutLoaders(elkLayouts);
+
+    // Initialize without auto-starting
+    mermaid.initialize({
+      startOnLoad: true,
+      layout: "elk",
+      look: "handCoded",
+      securityLevel: "loose",
+      flowchart: { defaultRenderer: "elk" }, // Double-force the renderer
+    });
+
+    // Manually run the renderer now that we are 100% sure ELK is registered
+    await mermaid.run();
+    console.log("ELK Layout loaded successfully.");
+    document.getElementById("loading-overlay").style.display = "none";
+    return true; // Indicate successful load of ELK
+  } catch (err) {
+    console.error("ELK Layout failed to load:", err);
+    return false; // Indicate failure to load ELK
+  }
+}
+
+async function loadStandardRender() {
+  const mermaid = await loadMermaid();
+  // Initialize without auto-starting
+  mermaid.initialize({
+    startOnLoad: true,
+    layout: "dagre",
+    securityLevel: "loose",
+  });
+
+  try {
+    await mermaid.run();
+    console.error("Standard Layout loaded successfully.");
+    document.getElementById("loading-overlay").style.display = "none";
+    return true; // Indicate successful load of standard layout
+  } catch (err2) {
+    console.error("Standard Layout failed to load:", err2);
+    return false; // Indicate failure to load standard layout
+  }
+}
+
+async function renderDiagram() {
+  try {
+    const elkSuccess = await loadELKRender();
+    if (!elkSuccess) {
+      console.warn("ELK render failed, attempting dagre render as fallback...");
+      const stdSuccess = await loadStandardRender();
+      if (!stdSuccess) {
+        console.error(
+          "Both standard and ELK renders failed. Diagram cannot be displayed.",
+        );
+        document.getElementById("loading-overlay").style.display = "none";
+      }
+    }
+  } catch (stdErr) {
+    console.error("Error during render:", stdErr);
+    document.getElementById("loading-overlay").style.display = "none";
+    // Add error info to the page for user visibility
+    const errorDiv = document.createElement("div");
+    errorDiv.style.position = "absolute";
+    errorDiv.style.top = "50%";
+    errorDiv.style.left = "50%";
+    errorDiv.style.transform = "translate(-50%, -50%)";
+    errorDiv.style.color = "red";
+    errorDiv.style.fontSize = "14px";
+    errorDiv.textContent =
+      "Failed to render diagram. Please check the console for errors.";
+    document.body.appendChild(errorDiv);
+  }
+}
+
+async function main() {
+  // Wait until the CDN files are actually parsed
+  // If only mermaid is not undefined, we can try to render with the standard renderer as a fallback
+  // while (typeof mermaid === "undefined" && typeof elkLayouts === "undefined") {
+  //   console.log("Waiting for Mermaid or ELK to load...");
+  //   await new Promise((r) => setTimeout(r, 50));
+  // }
+  // Use a timer instead
+  // await new Promise((r) => setTimeout(r, 500));
+
+  try {
+    console.log("Starting diagram rendering...");
+    renderDiagram();
+  } catch (finalErr) {
+    console.error("Unexpected error during rendering:", finalErr);
+    document.getElementById("loading-overlay").style.display = "none";
+  }
+}
+
+// Start the rendering process
+main();
+
+</script></body>
+</html>
